@@ -94,10 +94,7 @@ type info struct {
 const ts = "Mon Jan _2 2006"
 
 func format(w io.Writer, name string, commits []*object.Commit, start, end *Tag) {
-	fmt.Fprintf(w, "%s..%s\n", start.name, end.name)
-	commitSummary(w, commits)
 	x := calc(commits)
-	fmt.Fprintln(w)
 	fmt.Fprintf(w, "%v  received %d commits from %d contributors\n",
 		name, x.Contributions, x.Contributors,
 	)
@@ -109,6 +106,9 @@ func format(w io.Writer, name string, commits []*object.Commit, start, end *Tag)
 	for _, c := range x.Committers {
 		fmt.Fprintf(w, "- %v \n", c)
 	}
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "## Changelog\n%s..%s\n", start.name, end.name)
+	commitSummary(w, commits)
 }
 
 func calc(x []*object.Commit) *info {
