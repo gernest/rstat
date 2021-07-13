@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"sort"
+	"strings"
 
 	"github.com/coreos/go-semver/semver"
 	"github.com/go-git/go-git/v5"
@@ -86,6 +87,7 @@ func stats(w io.Writer, repo string) error {
 type info struct {
 	Contributors  int
 	Contributions int
+	Committers    []string
 }
 
 const ts = "Mon Jan _2 2006"
@@ -99,15 +101,30 @@ func format(w io.Writer, name string, commits []*object.Commit, start, end *Tag)
 		start.commit.Author.When.Format(ts),
 		end.commit.Author.When.Format(ts),
 	)
+	fmt.Fprintf(w, "\n committers \n -----------\n")
+	for _, c := range x.Committers {
+		fmt.Fprintf(w, "- %v \n", c)
+	}
 }
 
 func calc(x []*object.Commit) *info {
 	m := make(map[string]struct{})
+	var committers []string
+	cm := make(map[string]struct{})
 	for _, v := range x {
 		m[v.Author.Email] = struct{}{}
+		cm[v.Author.Name] = struct{}{}
 	}
+	for v := range cm {
+		if !strings.Contains(v, " ") {
+			continue
+		}
+		committers = append(committers, v)
+	}
+	sort.Strings(committers)
 	return &info{
 		Contributors:  len(m),
 		Contributions: len(x),
+		Committers:    committers,
 	}
 }
