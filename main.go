@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"errors"
 	"flag"
 	"fmt"
@@ -93,7 +94,10 @@ type info struct {
 const ts = "Mon Jan _2 2006"
 
 func format(w io.Writer, name string, commits []*object.Commit, start, end *Tag) {
+	fmt.Fprintf(w, "%s..%s\n", start.name, end.name)
+	commitSummary(w, commits)
 	x := calc(commits)
+	fmt.Fprintln(w)
 	fmt.Fprintf(w, "%v  received %d commits from %d contributors\n",
 		name, x.Contributions, x.Contributors,
 	)
@@ -127,4 +131,23 @@ func calc(x []*object.Commit) *info {
 		Contributions: len(x),
 		Committers:    committers,
 	}
+}
+
+func commitSummary(w io.Writer, commits []*object.Commit) {
+	for _, commit := range commits {
+		fmt.Fprintf(w, "%s %s\n", short(commit.Hash), firstLine(commit.Message))
+	}
+}
+
+func short(p plumbing.Hash) string {
+	return p.String()[:7]
+}
+
+func firstLine(msg string) string {
+	scan := bufio.NewScanner(strings.NewReader(msg))
+	scan.Split(bufio.ScanLines)
+	for scan.Scan() {
+		return scan.Text()
+	}
+	return ""
 }
