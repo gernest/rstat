@@ -68,12 +68,15 @@ func stats(w io.Writer, repo string) error {
 	})
 	e := len(tags) - 1
 	start, end := tags[e], tags[e-1]
-	var commits []*object.Commit
+	var from []*object.Commit
 	err = object.NewCommitPreorderIter(start.commit, nil, nil).ForEach(func(c *object.Commit) error {
-		if c.Hash.String() == end.commit.Hash.String() {
-			return io.EOF
-		}
-		commits = append(commits, c)
+		from = append(from, c)
+		return nil
+	})
+
+	var to []*object.Commit
+	err = object.NewCommitPreorderIter(end.commit, nil, nil).ForEach(func(c *object.Commit) error {
+		to = append(to, c)
 		return nil
 	})
 	if err != nil {
@@ -81,14 +84,14 @@ func stats(w io.Writer, repo string) error {
 			return err
 		}
 	}
-	format(w, start.name, commits, end, start)
+	format(w, start.name, merge(from, to), end, start)
 	return nil
 }
 
 type info struct {
 	Contributors  int
 	Contributions int
-	Committers    []string
+	Committers    []*Committer
 }
 
 const ts = "Mon Jan _2 2006"
@@ -104,28 +107,45 @@ func format(w io.Writer, name string, commits []*object.Commit, start, end *Tag)
 	)
 	fmt.Fprintf(w, "\n committers \n -----------\n")
 	for _, c := range x.Committers {
-		fmt.Fprintf(w, "- %v \n", c)
+		fmt.Fprintf(w, "- %v \n", c.name)
+		for _, msg := range c.commits {
+			fmt.Fprintf(w, "    - %v \n", firstLine(msg.Message))
+		}
 	}
 	fmt.Fprintln(w)
 	fmt.Fprintf(w, "## Changelog\n%s..%s\n", start.name, end.name)
 	commitSummary(w, commits)
 }
 
+type Committer struct {
+	name    string
+	commits []*object.Commit
+}
+
 func calc(x []*object.Commit) *info {
 	m := make(map[string]struct{})
-	var committers []string
-	cm := make(map[string]struct{})
+	var committers []*Committer
+	cm := make(map[string]*Committer)
 	for _, v := range x {
 		m[v.Author.Email] = struct{}{}
-		cm[v.Author.Name] = struct{}{}
+		if n, ok := cm[v.Author.Name]; ok {
+			n.commits = append(n.commits, v)
+		} else {
+			cm[v.Author.Name] = &Committer{
+				name:    v.Author.Name,
+				commits: []*object.Commit{v},
+			}
+		}
 	}
-	for v := range cm {
-		if !strings.Contains(v, " ") {
+	for _, v := range cm {
+		if !strings.Contains(v.name, " ") {
 			continue
 		}
 		committers = append(committers, v)
 	}
-	sort.Strings(committers)
+	sort.Slice(committers, func(i, j int) bool {
+		return committers[i].name < committers[j].name
+	})
 	return &info{
 		Contributors:  len(m),
 		Contributions: len(x),
@@ -150,4 +170,18 @@ func firstLine(msg string) string {
 		return scan.Text()
 	}
 	return ""
+}
+
+func merge(a, b []*object.Commit) (o []*object.Commit) {
+	seen := make(map[string]struct{})
+	for _, v := range b {
+		seen[v.Hash.String()] = struct{}{}
+	}
+	for _, v := range a {
+		_, ok := seen[v.Hash.String()]
+		if !ok {
+			o = append(o, v)
+		}
+	}
+	return
 }
